@@ -61,7 +61,12 @@
           tickHintX: 10,
           tickHintY: 10,
           timing: 750,
-          interpolation: 'monotone'
+          interpolation: 'monotone',
+          xMin: null,
+          xMax: null,
+          yMin: null,
+          yMax: null,
+          sortX: c._options.sortX
         });
       });
 
@@ -96,7 +101,8 @@
 
       it('adds event listener to window resize event', function () {
         var c = new xChart('bar', mData, container);
-        expect(d3.select(window).on('resize')).to.be.a('function');
+        expect(d3.select(window).on('resize.for.' + container))
+          .to.be.a('function');
       });
 
       it('data vis type is not overridden by type argument', function () {
@@ -218,7 +224,7 @@
               ],
               type: 'line',
               className: 'foo_bar'
-            }],
+            }]
           },
           c = new xChart('bar', data, container);
 
@@ -250,6 +256,28 @@
 
         expect(c._mainData[0].data[0]).to.be.eql({ x: '1taco', y: 10 });
         expect(c._mainData[0].data[1]).to.be.eql({ x: '2taco', y: 20 });
+      });
+
+      it('allows setting x/y Min/Max onto options', function () {
+        var c = new xChart('bar', mData, container),
+          newData = _.extend({}, mData, {
+            xMin: 1,
+            xMax: 10,
+            yMin: 2,
+            yMax: 8
+          }),
+          d;
+        c.setData(newData);
+        expect(c._options.xMin).to.equal(newData.xMin);
+
+        c = new xChart('bar', mData, container);
+        newData = _.extend(newData, {
+          xMin: 0,
+          yMin: 0,
+        });
+        c.setData(newData);
+        expect(c._options.xMin).to.equal(newData.xMin);
+        expect(c._options.yMin).to.equal(newData.yMin);
       });
     });
 
@@ -513,6 +541,53 @@
       };
       chart._resize();
       expect(count).to.be(1);
+    });
+  });
+
+  describe('sort data', function () {
+    var data = {
+      main: [{
+        label: 'Foobar',
+        data: [
+          { x: 2, y: 3 },
+          { x: 3, y: 2 },
+          { x: 1, y: 4 },
+          { x: 0, y: 1 },
+        ],
+        className: 'foo_bar'
+      }],
+      xScale: 'ordinal',
+      yScale: 'linear'
+    };
+
+    it('automatic sorting', function () {
+      var chart = new xChart('bar', data, container);
+      expect(chart._mainData[0].data[0]).to.be.eql({x : 0, y : 1});
+      expect(chart._mainData[0].data[1]).to.be.eql({x : 1, y : 4});
+      expect(chart._mainData[0].data[2]).to.be.eql({x : 2, y : 3});
+      expect(chart._mainData[0].data[3]).to.be.eql({x : 3, y : 2});
+    });
+
+    it('no sorting', function () {
+      var chart = new xChart('bar', data, container, {
+        sortX: function (a, b) {}
+      });
+      expect(chart._mainData[0].data[0]).to.be.eql({x : 2, y : 3});
+      expect(chart._mainData[0].data[1]).to.be.eql({x : 3, y : 2});
+      expect(chart._mainData[0].data[2]).to.be.eql({x : 1, y : 4});
+      expect(chart._mainData[0].data[3]).to.be.eql({x : 0, y : 1});
+    });
+
+    it('custom sorting method (reverse)', function () {
+      var chart = new xChart('bar', data, container, {
+        sortX: function (a, b) {
+          return !a.x && b.x ?  0 : a.x < b.x ? 1 : -1;
+        }
+      });
+      expect(chart._mainData[0].data[0]).to.be.eql({x : 3, y : 2});
+      expect(chart._mainData[0].data[1]).to.be.eql({x : 2, y : 3});
+      expect(chart._mainData[0].data[2]).to.be.eql({x : 1, y : 4});
+      expect(chart._mainData[0].data[3]).to.be.eql({x : 0, y : 1});
     });
   });
 }());

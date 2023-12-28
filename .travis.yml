@@ -2,6 +2,8 @@ script: "make lint && make test reporter=spec"
 language: node_js
 node_js:
   - 0.8
+  - 0.10
 branches:
-  only:
-    - master
+  except:
+    - site-templates
+    - gh-pages

@@ -1,8 +1,15 @@
+SHA := $(shell git rev-parse HEAD)
+THIS_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
+VERSION := $(shell npm ls | grep "xcharts@" |  grep -Eo "[0-9]*\.[0-9]*\.[0-9]*")
 NODE_PATH = node_modules/.bin
-JS_COMPILER = $(NODE_PATH)/uglifyjs
+JS_COMPILER = $(NODE_PATH)/uglifyjs --comments="license"
 JS_BEAUTIFIER = $(NODE_PATH)/uglifyjs -b -i 2 -nm -ns
 CSS_COMPILER = $(NODE_PATH)/lessc --strict-imports
 CSS_MINIFIER = $(CSS_COMPILER) --yui-compress
+
+TMP = 'tmp_build'
+REMOTE=origin
+DOC_BRANCH=gh-pages
 
 all:
 	@npm install -d
@@ -11,6 +18,7 @@ all:
 
 pre-build:
 	@mkdir -p build
+	@sed -i.bak 's/v[0-9]*\.[0-9]*\.[0-9]*/v${VERSION}/' scripts/wrap-start.js
 
 build: pre-build \
 	build/xcharts.js \
@@ -20,6 +28,7 @@ build: pre-build \
 	build/LICENSE \
 	build/README.md
 	@tar -czf xcharts-build.tar.gz build/
+	@find ./ -name "*.bak" -delete
 
 .INTERMEDIATE build/xcharts.js: \
 	scripts/wrap-start.js \
@@ -70,13 +79,41 @@ build/%: %
 clean:
 	@echo "Cleaning..."
 	@rm -rf build
+	@rm -rf ${TMP}
 
-jsfiles := $(shell find . -name '*.js' ! -name '*lodash.js' ! -path './node_modules/*' ! -path './test/lib/*' ! -path "./build/*" ! -path "./scripts/*" ! -path "./tmp_build/*")
+jsfiles := $(shell find . -name '*.js' ! -name '*lodash.js' ! -path './node_modules/*' ! -path './test/lib/*' ! -path "./build/*" ! -path "./scripts/*" ! -path "./tmp_build/*" ! -path "./docs/*xcharts*js" ! -name "*.min.js")
 lint:
 	@node_modules/nodelint/nodelint ${jsfiles} --config=scripts/lint-config.js
 
 reporter='dot'
 test: build
-	@node_modules/.bin/mocha-phantomjs test/test.html --reporter ${reporter}
+	@${NODE_PATH}/mocha-phantomjs test/test.html --reporter ${reporter}
 
-.PHONY: lint test
+pre-docs: clean build
+	@sed -i.bak 's/v[0-9]*\.[0-9]*\.[0-9]*/v${VERSION}/' docs.json
+	@rm docs.json.bak
+
+docs: pre-docs
+	@mkdir -p docs/css
+	@node_modules/.bin/lessc --yui-compress --include-path=docs/less docs/less/master.less docs/css/master.css
+	@node_modules/.bin/still docs -o ${TMP} -i "layouts" -i "json" -i "less" -i "macro"
+	@cp node_modules/d3/d3.min.js ${TMP}/js/d3.min.js
+	@cp build/xcharts*js ${TMP}/js/
+	@git checkout master
+	@cp xcharts-build.tar.gz ${TMP}/xcharts-build.tar.gz
+	@git checkout ${DOC_BRANCH}
+	@cp -r ${TMP}/* ./
+	@rm -rf ${TMP}
+	@git add .
+	@git commit -n -am "Automated build from ${SHA}"
+	@git push ${REMOTE} ${DOC_BRANCH}
+	@git checkout ${THIS_BRANCH}
+
+port = 3000
+test-docs: pre-docs
+	@node_modules/.bin/still-server docs/ -p ${port} -o
+
+publish: all clean build
+	@npm publish
+
+.PHONY: lint test clean docs test-docs
